@@ -1,4 +1,4 @@
-package org.example.metrics.exporter.processing;
+package org.example.metrics.exporter.processing.mobile;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

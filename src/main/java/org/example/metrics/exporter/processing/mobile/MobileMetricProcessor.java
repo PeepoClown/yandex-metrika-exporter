@@ -1,4 +1,4 @@
-package org.example.metrics.exporter.processing;
+package org.example.metrics.exporter.processing.mobile;
 
 import lombok.RequiredArgsConstructor;
 import org.example.metrics.exporter.configuration.DetailedRequirementsReceiver;
@@ -21,7 +21,7 @@ import static org.example.metrics.exporter.configuration.DetailedRequirementsRec
 @RequiredArgsConstructor
 public class MobileMetricProcessor {
 
-    private static final int MAX_DATE_RANGE = 5;
+    private static final int MAX_DATE_RANGE = 2;
     private static final int MAX_METRICS_COUNT = 20;
 
     private final MobileStatsSender mobileStatsSender;
@@ -68,7 +68,7 @@ public class MobileMetricProcessor {
         var startDate = detailedRequirementsReceiver.getReportStartDate();
         var endDate = detailedRequirementsReceiver.getReportEndDate();
 
-        while (startDate.isBefore(endDate)) {
+        while (!startDate.isAfter(endDate)) {
             var currentEndDate = startDate.plusDays(MAX_DATE_RANGE).isBefore(endDate)
                     ? startDate.plusDays(MAX_DATE_RANGE)
                     : endDate;

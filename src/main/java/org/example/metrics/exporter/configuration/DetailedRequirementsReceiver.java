@@ -22,6 +22,12 @@ public class DetailedRequirementsReceiver {
                 .orElseThrow(() -> new IllegalArgumentException("Mobile rows not specified"));
     }
 
+    public List<String> getWebMetricRows() {
+        return ofNullable(getProperty("web.rows"))
+                .map(property -> asList(property.split(":")))
+                .orElseThrow(() -> new IllegalArgumentException("Web rows not specified"));
+    }
+
     public LocalDate getReportStartDate() {
         return ofNullable(getProperty("date.from"))
                 .map(date -> LocalDate.parse(date, FORMATTER))
@@ -32,5 +38,10 @@ public class DetailedRequirementsReceiver {
         return ofNullable(getProperty("date.to"))
                 .map(date -> LocalDate.parse(date, FORMATTER))
                 .orElseThrow(() -> new IllegalArgumentException("End date not specified"));
+    }
+
+    public String getExportMode() {
+        return ofNullable(getProperty("export.mode"))
+                .orElseThrow(() -> new IllegalArgumentException("Export mode not specified"));
     }
 }

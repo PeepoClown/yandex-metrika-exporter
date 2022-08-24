@@ -1,9 +1,8 @@
-package org.example.metrics.exporter.processing;
+package org.example.metrics.exporter.processing.web;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.example.metrics.exporter.configuration.DetailedRequirementsReceiver;
 import org.example.metrics.exporter.model.MetricResponseModel;
@@ -14,50 +13,41 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import static java.lang.String.join;
 import static java.time.format.DateTimeFormatter.ofPattern;
+import static java.util.stream.Collectors.joining;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class MobileMetricReporter {
+public class WebMetricReporter {
 
     private static final DateTimeFormatter EXCEL_FORMATTER = ofPattern("dd.MM.yyyy");
 
-    private final MobileMetricProcessor mobileMetricProcessor;
+    private final WebMetricProcessor webMetricProcessor;
     private final DetailedRequirementsReceiver detailedRequirementsReceiver;
 
-    public void formMobileReport() {
-        try (var fileOutputStream = new FileOutputStream("metrics-report.xlsx")) {
+    public void formWebReport() {
+        try (var fileOutputStream = new FileOutputStream("metrics-report-web.xlsx")) {
             var workbook = new XSSFWorkbook();
-            var metricRows = detailedRequirementsReceiver.getMobileMetricRows();
+            var metricRows = detailedRequirementsReceiver.getWebMetricRows();
             var precalculatedDates = precalcDates(detailedRequirementsReceiver.getReportStartDate(), detailedRequirementsReceiver.getReportEndDate());
 
-            formAndroidReport(workbook, metricRows, precalculatedDates);
-            formIosReport(workbook, metricRows, precalculatedDates);
+            var sheetWebEvents = workbook.createSheet("web events");
+            var sheetWebUsers = workbook.createSheet("web users");
+
+            fillExcel(sheetWebEvents, webMetricProcessor.senaAndProcessWebEvent(), metricRows, precalculatedDates);
+            fillExcel(sheetWebUsers, webMetricProcessor.senaAndProcessWebUser(), metricRows, precalculatedDates);
 
             workbook.write(fileOutputStream);
             workbook.close();
         } catch (IOException e) {
-            log.warn("Failed to process", e);
+            log.warn("Failed to process web", e);
         }
-    }
-
-    private void formAndroidReport(Workbook workbook, List<String> metricRows, List<LocalDate> dates) {
-        var sheetAndroidEvents = workbook.createSheet("android events");
-        var sheetAndroidUsers = workbook.createSheet("android users");
-
-        fillExcel(sheetAndroidEvents, mobileMetricProcessor.sendAndProcessAndroidEvent(), metricRows, dates);
-        fillExcel(sheetAndroidUsers, mobileMetricProcessor.sendAndProcessAndroidUser(), metricRows, dates);
-    }
-
-    private void formIosReport(Workbook workbook, List<String> metricRows, List<LocalDate> dates) {
-        var sheetIosEvents = workbook.createSheet("ios events");
-        var sheetIosUsers = workbook.createSheet("ios users");
-
-        fillExcel(sheetIosEvents, mobileMetricProcessor.sendAndProcessIosEvent(), metricRows, dates);
-        fillExcel(sheetIosUsers, mobileMetricProcessor.sendAndProcessIosUser(), metricRows, dates);
     }
 
     private void fillExcel(Sheet sheet, List<MetricResponseModel> response, List<String> metricRows, List<LocalDate> dates) {
@@ -89,7 +79,7 @@ public class MobileMetricReporter {
 
     private String currCellValue(List<MetricResponseModel> response, String metricName, int pos) {
         var value = response.stream()
-                .filter(metric -> metric.getMetricName().equals(metricName))
+                .filter(metric -> Arrays.stream(metric.getMetricName().split(" -> ")).collect(joining(",")).equals(metricName))
                 .findFirst()
                 .get()
                 .getValues()
