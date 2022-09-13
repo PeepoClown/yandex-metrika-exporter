@@ -8,6 +8,6 @@ import java.util.List;
 @Data
 @Accessors(chain = true)
 public class MetricResponseModel {
-    private String metricName;
+    private String alias;
     private List<String> values;
 }

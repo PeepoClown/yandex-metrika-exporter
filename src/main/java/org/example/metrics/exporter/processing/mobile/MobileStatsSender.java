@@ -10,19 +10,16 @@ import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
-import org.example.metrics.exporter.model.mob.AppmetricaRequestModel;
 import org.example.metrics.exporter.model.MetricResponseModel;
 import org.example.metrics.exporter.model.mob.AppMetricResponse;
+import org.example.metrics.exporter.model.mob.AppmetricaRequestModel;
 import org.example.metrics.exporter.properties.mob.AppmetricaProperties;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.List;
 
-import static java.util.Collections.emptyList;
-import static java.util.stream.Collectors.toList;
 import static org.apache.http.HttpHeaders.AUTHORIZATION;
 
 @Slf4j
@@ -36,32 +33,32 @@ public class MobileStatsSender {
 
     private final AppmetricaProperties appmetricaProperties;
 
-    public List<MetricResponseModel> sendRequest(AppmetricaRequestModel requestModel) {
+    public MetricResponseModel sendRequest(AppmetricaRequestModel requestModel) {
         try {
             var request = buildRequest(requestModel);
             var response = httpClient.execute(request);
 
             if (SUCCESS_STATUS_CODE != response.getStatusLine().getStatusCode()) {
-                log.warn("Response received with status failed. {} : {}", response.getStatusLine().getStatusCode(),
-                        EntityUtils.toString(response.getEntity()));
+                log.warn("For filter [{}] response received with status failed ({}). Date interval [{};{}]", requestModel.getFilters(),
+                        response.getStatusLine().getStatusCode(), requestModel.getDate1(), requestModel.getDate2());
                 return sendRequest(requestModel);
             }
-            return processResponse(response.getEntity());
+            return processResponse(response.getEntity(), requestModel);
         } catch (Exception e) {
             log.warn("Failed to send request", e);
-            return emptyList();
+            return null;
         }
     }
 
-    private List<MetricResponseModel> processResponse(HttpEntity entity) throws IOException {
+    private MetricResponseModel processResponse(HttpEntity entity, AppmetricaRequestModel requestModel) throws IOException {
         var stringBody = EntityUtils.toString(entity);
         var parsedEntity = objectMapper.readValue(stringBody, AppMetricResponse.class);
 
         return parsedEntity.getData().stream()
                 .map(data -> new MetricResponseModel()
-                        .setMetricName(data.getDimensions().get(0).getName())
+                        .setAlias(requestModel.getAlias())
                         .setValues(data.getMetrics().get(0)))
-                .collect(toList());
+                .findAny().get();
     }
 
     private HttpUriRequest buildRequest(AppmetricaRequestModel request) throws URISyntaxException {
@@ -78,11 +75,11 @@ public class MobileStatsSender {
                 .addParameter("date2", request.getDate2())
                 .addParameter("group", request.getGroup())
                 .addParameter("metrics", request.getMetrics())
-                .addParameter("dimensions", request.getDimensions())
                 .addParameter("include_undefined", request.getIncludeUndefined())
                 .addParameter("accuracy", request.getAccuracy())
                 .addParameter("proposedAccuracy", request.getProposedAccuracy())
-                .addParameter("row_ids", request.getRows())
+                .addParameter("row_ids", "[]")
+                .addParameter("filters", request.getFilters())
                 .build();
     }
 }

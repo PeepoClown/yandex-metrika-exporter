@@ -1,6 +1,8 @@
 package org.example.metrics.exporter.processing.mobile;
 
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.example.metrics.exporter.configuration.DetailedRequirementsReceiver;
 import org.example.metrics.exporter.model.MetricResponseModel;
 import org.example.metrics.exporter.model.mob.AppmetricaRequestModel;
@@ -12,58 +14,60 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
+import static java.util.concurrent.Executors.newFixedThreadPool;
+import static org.apache.commons.collections4.CollectionUtils.isEmpty;
 import static org.example.metrics.exporter.configuration.DetailedRequirementsReceiver.FORMATTER;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MobileMetricProcessor {
 
-    private static final int MAX_DATE_RANGE = 2;
-    private static final int MAX_METRICS_COUNT = 20;
+    private static final int MAX_DATE_RANGE = 7;
+    private final ExecutorService executor = newFixedThreadPool(20);
 
     private final MobileStatsSender mobileStatsSender;
     private final IosReportProperties iosReportProperties;
     private final AndroidReportProperties androidReportProperties;
     private final DetailedRequirementsReceiver detailedRequirementsReceiver;
 
-    public List<MetricResponseModel> sendAndProcessAndroidEvent() {
-        return sendAndProcess(androidReportProperties, true);
+    public List<MetricResponseModel> sendAndProcessAndroidUser(List<String> metrics) {
+        return sendAndProcess(androidReportProperties, metrics);
     }
 
-    public List<MetricResponseModel> sendAndProcessAndroidUser() {
-        return sendAndProcess(androidReportProperties, false);
+    public List<MetricResponseModel> sendAndProcessIosUser(List<String> metrics) {
+        return sendAndProcess(iosReportProperties, metrics);
     }
 
-    public List<MetricResponseModel> sendAndProcessIosEvent() {
-        return sendAndProcess(iosReportProperties, true);
-    }
+    @SneakyThrows
+    private List<MetricResponseModel> sendAndProcess(AppmetricaReportProperties properties, List<String> metrics) {
+        var resultedList = new ArrayList<CompletableFuture<MetricResponseModel>>();
 
-    public List<MetricResponseModel> sendAndProcessIosUser() {
-        return sendAndProcess(iosReportProperties, false);
-    }
+        for (var metric : metrics) {
+            var splited = metric.split("::");
 
-    private List<MetricResponseModel> sendAndProcess(AppmetricaReportProperties properties, boolean isEvent) {
-        var resultedList = new ArrayList<MetricResponseModel>();
+            var alias = splited[0];
+            var filter = splited[1];
 
-        int metricsCounter = 0;
-        var metricRows = detailedRequirementsReceiver.getMobileMetricRows();
-        while (metricsCounter < metricRows.size()) {
-            int metricsCounterEnd = Math.min(metricsCounter + MAX_METRICS_COUNT, metricRows.size());
-
-            var sublist = metricRows.subList(metricsCounter, metricsCounterEnd);
-            resultedList.addAll(sendAndProcessWithDateCheck(properties, isEvent, sublist));
-
-            metricsCounter = metricsCounterEnd;
+            resultedList.add(CompletableFuture.supplyAsync(() -> sendAndProcessWithDateCheck(properties, filter, alias), executor));
         }
 
-        return resultedList;
+        CompletableFuture<MetricResponseModel>[] futureResultArray = resultedList.toArray(new CompletableFuture[resultedList.size()]);
+        CompletableFuture<Void> combinedFuture = CompletableFuture.allOf(futureResultArray);
+        return combinedFuture
+                .thenApply(v -> resultedList.stream()
+                        .map(CompletableFuture::join)
+                        .collect(Collectors.toList()))
+                .get();
     }
 
-    private List<MetricResponseModel> sendAndProcessWithDateCheck(AppmetricaReportProperties properties, boolean isEvent, List<String> rows) {
-        var resultedList = new ArrayList<MetricResponseModel>();
+    private MetricResponseModel sendAndProcessWithDateCheck(AppmetricaReportProperties properties, String filters, String alias) {
+        log.info("Filter [{}] in progress...", filters);
+        var result = new MetricResponseModel();
 
         var startDate = detailedRequirementsReceiver.getReportStartDate();
         var endDate = detailedRequirementsReceiver.getReportEndDate();
@@ -73,45 +77,36 @@ public class MobileMetricProcessor {
                     ? startDate.plusDays(MAX_DATE_RANGE)
                     : endDate;
 
-            var request = buildRequestModel(properties, isEvent, startDate, currentEndDate, rows);
+            var request = buildRequestModel(properties, startDate, currentEndDate, filters, alias);
             var apiResult = mobileStatsSender.sendRequest(request);
-            appendDateResults(resultedList, apiResult);
+            appendDateResults(result, apiResult);
 
             startDate = currentEndDate.plusDays(1);
         }
 
-        return resultedList;
+        log.info("Filter [{}] completed", filters);
+        return result;
     }
 
-    private AppmetricaRequestModel buildRequestModel(AppmetricaReportProperties properties, boolean isEvent, LocalDate dateFrom,
-                                                     LocalDate dateTo, List<String> rows) {
-        var formattedRows = "[" + rows.stream().map(s -> "[\"" + s + "\"]").collect(Collectors.joining(",")) + "]";
+    private AppmetricaRequestModel buildRequestModel(AppmetricaReportProperties properties, LocalDate dateFrom, LocalDate dateTo, String filters, String alias) {
         return new AppmetricaRequestModel()
                 .setId(properties.getId())
                 .setDate1(FORMATTER.format(dateFrom))
                 .setDate2(FORMATTER.format(dateTo))
                 .setGroup(properties.getGroupBy())
-                .setMetrics(isEvent ? properties.getEventMetric() : properties.getUserMetric())
-                .setDimensions(properties.getDimensions())
+                .setMetrics(properties.getUserMetric())
                 .setIncludeUndefined(String.valueOf(properties.isIncludeUndefined()))
                 .setAccuracy(String.valueOf(properties.getAccuracy()))
                 .setProposedAccuracy(String.valueOf(properties.isProposedAccuracy()))
-                .setRows(formattedRows);
+                .setFilters(filters)
+                .setAlias(alias);
     }
 
-    private void appendDateResults(List<MetricResponseModel> resultedList, List<MetricResponseModel> apiResult) {
-        if (resultedList.isEmpty()) {
-            resultedList.addAll(apiResult);
-            return;
+    private void appendDateResults(MetricResponseModel resulted, MetricResponseModel apiResult) {
+        resulted.setAlias(apiResult.getAlias());
+        if (isEmpty(resulted.getValues())) {
+            resulted.setValues(new ArrayList<>());
         }
-
-        for (var i = new AtomicInteger(0); i.get() < apiResult.size(); i.incrementAndGet()) {
-            var resultedElem = resultedList.stream()
-                    .filter(metric -> metric.getMetricName().equals(apiResult.get(i.get()).getMetricName()))
-                    .findFirst()
-                    .get();
-            resultedElem.getValues()
-                    .addAll(apiResult.get(i.get()).getValues());
-        }
+        resulted.getValues().addAll(apiResult.getValues());
     }
 }

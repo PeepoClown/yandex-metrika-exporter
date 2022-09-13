@@ -20,13 +20,7 @@ public class AndroidReportProperties
     private final String groupBy = "day";
 
     @NotBlank
-    private final String eventMetric;
-
-    @NotBlank
     private final String userMetric;
-
-    @NotBlank
-    private final String dimensions;
 
     private final boolean includeUndefined = true;
 

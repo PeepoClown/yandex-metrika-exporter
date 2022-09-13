@@ -6,11 +6,7 @@ public interface AppmetricaReportProperties {
 
     String getGroupBy();
 
-    String getEventMetric();
-
     String getUserMetric();
-
-    String getDimensions();
 
     boolean isIncludeUndefined();
 

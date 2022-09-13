@@ -16,18 +16,6 @@ public class DetailedRequirementsReceiver {
 
     public static final DateTimeFormatter FORMATTER = ISO_LOCAL_DATE;
 
-    public List<String> getMobileMetricRows() {
-        return ofNullable(getProperty("mobile.rows"))
-                .map(property -> asList(property.split(",")))
-                .orElseThrow(() -> new IllegalArgumentException("Mobile rows not specified"));
-    }
-
-    public List<String> getWebMetricRows() {
-        return ofNullable(getProperty("web.rows"))
-                .map(property -> asList(property.split(":")))
-                .orElseThrow(() -> new IllegalArgumentException("Web rows not specified"));
-    }
-
     public LocalDate getReportStartDate() {
         return ofNullable(getProperty("date.from"))
                 .map(date -> LocalDate.parse(date, FORMATTER))
@@ -40,8 +28,15 @@ public class DetailedRequirementsReceiver {
                 .orElseThrow(() -> new IllegalArgumentException("End date not specified"));
     }
 
-    public String getExportMode() {
-        return ofNullable(getProperty("export.mode"))
-                .orElseThrow(() -> new IllegalArgumentException("Export mode not specified"));
+    public List<String> getAndroidFilters() {
+        return ofNullable(getProperty("android.filters"))
+                .map(property -> asList(property.split(",")))
+                .orElseThrow(() -> new IllegalArgumentException("Android filters not specified"));
+    }
+
+    public List<String> getIosFilters() {
+        return ofNullable(getProperty("ios.filters"))
+                .map(property -> asList(property.split(",")))
+                .orElseThrow(() -> new IllegalArgumentException("Ios filters not specified"));
     }
 }

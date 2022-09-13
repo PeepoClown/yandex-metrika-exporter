@@ -11,9 +11,10 @@ public class AppmetricaRequestModel {
     private String date2;
     private String group;
     private String metrics;
-    private String dimensions;
     private String includeUndefined;
     private String accuracy;
     private String proposedAccuracy;
     private String rows;
+    private String filters;
+    private String alias;
 }
